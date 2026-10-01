@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CS Audit">
+  <meta name="theme-color" content="#7a1f4b">
+  <meta name="robots" content="noindex, nofollow">
+  <title>CS Audit — NMCH</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="backBtn" class="icon-btn" aria-label="Back" hidden>‹</button>
+    <h1 id="title">CS Audit</h1>
+    <span id="netStatus" class="net"></span>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <a href="#/home" data-tab="home">🏠<span>Home</span></a>
+    <a href="#/list" data-tab="list">📋<span>Cases</span></a>
+    <a href="#/new" data-tab="new" class="tab-new">＋<span>New case</span></a>
+    <a href="#/settings" data-tab="settings">⚙️<span>Settings</span></a>
+  </nav>
+
+  <div id="lock" class="lock" hidden>
+    <div class="lock-box">
+      <h2 id="lockTitle">Enter PIN</h2>
+      <p id="lockMsg" class="muted"></p>
+      <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN">
+      <button id="pinBtn" class="btn primary">Unlock</button>
+      <button id="pinForgot" class="btn link">Forgot PIN?</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="derive.js"></script>
+  <script src="schema.js"></script>
+  <script src="db.js"></script>
+  <script src="export.js"></script>
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
