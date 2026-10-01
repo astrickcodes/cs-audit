@@ -1,6 +1,6 @@
 /* Offline support: serve app files from cache, refresh them in the background.
    Bump VERSION whenever app files change so phones pick up the update. */
-const VERSION = 'cs-audit-v1.0.1';
+const VERSION = 'cs-audit-v1.0.2';
 const ASSETS = [
   './', './index.html', './styles.css', './derive.js', './schema.js', './db.js', './export.js', './sync.js', './app.js',
   './manifest.json', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',

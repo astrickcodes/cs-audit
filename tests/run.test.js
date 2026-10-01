@@ -190,3 +190,12 @@ test('Apps Script: token check, insert, then update without duplicating', () => 
   assert.equal(sheet.cells[1].at(-1), 'x');
   assert.deepEqual(post({ token, ping: true }), { ok: true, rows: 2 });
 });
+
+test('export timestamps are in IST', () => {
+  assert.equal(Schema.toIST('2026-10-01T17:05:09.123Z'), '2026-10-01 22:35:09');
+  assert.equal(Schema.toIST('2026-10-01T20:00:00.000Z'), '2026-10-02 01:30:00'); // crosses midnight
+  assert.equal(Schema.toIST(''), '');
+  const row = Schema.flatten({ study_id: 'CS-001', createdAt: '2026-10-01T17:05:00.000Z', updatedAt: '2026-10-01T18:00:00.000Z' });
+  assert.equal(row.created_at, '2026-10-01 22:35:00');
+  assert.equal(row.updated_at, '2026-10-01 23:30:00');
+});

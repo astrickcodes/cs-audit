@@ -6,8 +6,8 @@ One row per case in the CSV export and the Google Sheet. Category variables are 
 |---|---|---|---|
 | `study_id` | Study ID (CS-001 …) | text |  |
 | `status` | Record status | text | draft / complete |
-| `created_at` | Record created (UTC) | datetime |  |
-| `updated_at` | Record last edited (UTC) | datetime |  |
+| `created_at` | Record created (IST) | datetime |  |
+| `updated_at` | Record last edited (IST) | datetime |  |
 | **1. Identification & eligibility** | | | |
 | `name` | Patient name (required) | text |  |
 | `phone` | Phone number | text |  |

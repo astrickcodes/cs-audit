@@ -32,5 +32,7 @@
     put: (rec) => run('readwrite', (s) => s.put(rec)),
     del: (id) => run('readwrite', (s) => s.delete(id)),
     putMany: (recs) => run('readwrite', (s) => { recs.forEach((r) => s.put(r)); return null; }),
+    // Delete old keys and write new records in one transaction (used to change study IDs)
+    replace: (oldIds, recs) => run('readwrite', (s) => { oldIds.forEach((id) => s.delete(id)); recs.forEach((r) => s.put(r)); return null; }),
   };
 })(window);

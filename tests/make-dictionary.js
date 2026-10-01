@@ -7,8 +7,8 @@ const Schema = require('../schema.js');
 const meta = [
   ['study_id', 'Study ID (CS-001 …)', 'text', ''],
   ['status', 'Record status', 'text', 'draft / complete'],
-  ['created_at', 'Record created (UTC)', 'datetime', ''],
-  ['updated_at', 'Record last edited (UTC)', 'datetime', ''],
+  ['created_at', 'Record created (IST)', 'datetime', ''],
+  ['updated_at', 'Record last edited (IST)', 'datetime', ''],
 ];
 const typeName = { text: 'text', tel: 'text', textarea: 'text', number: 'number', date: 'date (YYYY-MM-DD)', datetime: 'date-time (YYYY-MM-DDTHH:MM)', radio: 'category', select: 'category', computed: 'auto-calculated' };
 

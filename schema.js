@@ -259,14 +259,21 @@
     return w;
   }
 
+  /* Stored UTC ISO timestamp → "YYYY-MM-DD HH:MM:SS" in IST (UTC+5:30, no daylight saving). */
+  function toIST(iso) {
+    const t = Date.parse(iso || '');
+    if (Number.isNaN(t)) return iso || '';
+    return new Date(t + 330 * 60000).toISOString().slice(0, 19).replace('T', ' ');
+  }
+
   /* Flatten one record into CSV/Sheet columns (labels for single choice, 0/1 per option for multi). */
   function flatten(r) {
     const d = Derive.deriveAll(r);
     const row = {
       study_id: r.study_id,
       status: r.status || 'draft',
-      created_at: r.createdAt || '',
-      updated_at: r.updatedAt || '',
+      created_at: toIST(r.createdAt),
+      updated_at: toIST(r.updatedAt),
     };
     for (const f of FIELDS) {
       if (f.id === 'study_id') continue;
@@ -296,7 +303,7 @@
     return cols;
   }
 
-  const api = { SECTIONS, FIELDS, FIELD_BY_ID, INDICATIONS, isVisible, isEmpty, validate, warnings, flatten, columns };
+  const api = { SECTIONS, FIELDS, FIELD_BY_ID, INDICATIONS, isVisible, isEmpty, validate, warnings, flatten, columns, toIST };
   root.Schema = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
