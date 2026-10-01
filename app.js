@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.0.1';
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
   const view = $('#view');
@@ -606,9 +606,10 @@
       <div class="card">
         <h3>Google Sheet sync</h3>
         <label>Web-app URL (from Apps Script → Deploy)</label>
-        <input id="setUrl" type="url" value="${esc(s.url)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+        <input id="setUrl" type="url" value="${esc(s.url)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
         <label>Secret token (same as in Code.gs)</label>
-        <input id="setToken" type="text" value="${esc(s.token)}" autocomplete="off">
+        <input id="setToken" type="text" value="${esc(s.token)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" class="mono">
+        <p class="muted small">Type it exactly as in Code.gs, without the quote marks. Capital letters matter.</p>
         <div class="row">
           <button class="btn primary" id="saveSync">Save</button>
           <button class="btn" id="testSync">Test connection</button>
@@ -638,7 +639,10 @@
 
     $('#saveSync').onclick = () => {
       localStorage.setItem('syncUrl', $('#setUrl').value.trim());
-      localStorage.setItem('syncToken', $('#setToken').value.trim());
+      // Drop quote marks copied from Code.gs (including iPhone "smart" quotes)
+      const token = $('#setToken').value.trim().replace(/^['"‘’“”]+|['"‘’“”;]+$/g, '');
+      $('#setToken').value = token;
+      localStorage.setItem('syncToken', token);
       toast('Saved');
     };
     $('#testSync').onclick = async () => {
