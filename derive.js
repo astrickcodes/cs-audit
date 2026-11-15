@@ -113,6 +113,17 @@
 
   function nonNeg(v) { return v === null ? '' : v; }
 
+  // Total pints = PRBC + FFP + platelets; falls back to the old single "units" value for cases entered before the split
+  function txTotal(r) {
+    if (r.transfusion !== 'yes') return '';
+    const sel = Array.isArray(r.tx_product) ? r.tx_product : [];
+    const ids = { prbc: 'prbc_units', ffp: 'ffp_units', platelets: 'platelet_units' };
+    const parts = sel.map((p) => num(r[ids[p]])).filter((x) => x !== null);
+    if (parts.length) return parts.reduce((a, b) => a + b, 0);
+    const legacy = num(r.transfusion_units);
+    return legacy === null ? '' : legacy;
+  }
+
   // All computed fields, keyed by the schema ids of type "computed"
   function deriveAll(r) {
     const rb = robson(r);
@@ -130,10 +141,11 @@
       postop_days: nonNeg(daysBetween(r.birth_dt, r.discharge_date)),
       bw_cat: bwCategory(r),
       perinatal_death: perinatalDeath(r),
+      transfusion_units: txTotal(r),
     };
   }
 
-  const api = { num, gaWeeks, robson, ROBSON_LABELS, minutesBetween, daysBetween, bmi, anaemiaGrade, bwCategory, elderly, eligibility, perinatalDeath, deriveAll };
+  const api = { num, gaWeeks, robson, ROBSON_LABELS, minutesBetween, daysBetween, bmi, anaemiaGrade, bwCategory, elderly, eligibility, perinatalDeath, txTotal, deriveAll };
   root.Derive = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

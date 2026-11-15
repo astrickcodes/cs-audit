@@ -150,8 +150,15 @@
         },
         { id: 'io_specify', label: 'Other (specify)', type: 'text', show: (r) => has(r, 'io', 'other') },
         { id: 'ebl', label: 'Estimated blood loss', type: 'number', unit: 'mL', min: 0, max: 5000 },
-        { id: 'transfusion', label: 'Blood transfusion?', type: 'radio', options: YN },
-        { id: 'transfusion_units', label: 'Units transfused', type: 'number', min: 1, max: 20, show: (r) => r.transfusion === 'yes' },
+        { id: 'transfusion', label: 'Blood / blood product transfusion?', type: 'radio', options: YN },
+        {
+          id: 'tx_product', label: 'Products transfused (select all)', type: 'multi', req: true, show: (r) => r.transfusion === 'yes',
+          options: [['prbc', 'PRBC'], ['ffp', 'FFP'], ['platelets', 'Platelets']],
+        },
+        { id: 'prbc_units', label: 'PRBC', type: 'number', unit: 'pints', min: 1, max: 20, req: true, show: (r) => r.transfusion === 'yes' && has(r, 'tx_product', 'prbc') },
+        { id: 'ffp_units', label: 'FFP', type: 'number', unit: 'pints', min: 1, max: 20, req: true, show: (r) => r.transfusion === 'yes' && has(r, 'tx_product', 'ffp') },
+        { id: 'platelet_units', label: 'Platelets', type: 'number', unit: 'pints', min: 1, max: 20, req: true, show: (r) => r.transfusion === 'yes' && has(r, 'tx_product', 'platelets') },
+        { id: 'transfusion_units', label: 'Total pints transfused', type: 'computed', unit: 'pints' },
       ],
     },
     {

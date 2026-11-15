@@ -146,8 +146,14 @@ One row per case in the CSV export and the Google Sheet. Category variables are 
 | `io_other` | Intra-operative complications (select all): Other | 0/1 |  |
 | `io_specify` | Other (specify) | text |  |
 | `ebl` | Estimated blood loss | number | 0–5000 mL |
-| `transfusion` | Blood transfusion? | category | Yes; No |
-| `transfusion_units` | Units transfused | number | 1–20 |
+| `transfusion` | Blood / blood product transfusion? | category | Yes; No |
+| `tx_product_prbc` | Products transfused (select all): PRBC | 0/1 |  |
+| `tx_product_ffp` | Products transfused (select all): FFP | 0/1 |  |
+| `tx_product_platelets` | Products transfused (select all): Platelets | 0/1 |  |
+| `prbc_units` | PRBC (required) | number | 1–20 pints |
+| `ffp_units` | FFP (required) | number | 1–20 pints |
+| `platelet_units` | Platelets (required) | number | 1–20 pints |
+| `transfusion_units` | Total pints transfused | auto-calculated | pints |
 | **8. Post-operative & discharge** | | | |
 | `po_none` | Post-operative complications (select all): None | 0/1 |  |
 | `po_fever` | Post-operative complications (select all): Fever | 0/1 |  |
