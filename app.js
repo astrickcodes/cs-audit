@@ -740,12 +740,19 @@
   $('#pinForgot').addEventListener('click', onForgotPin);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // iPhone keeps home-screen apps alive in the background: check for updates every time the app comes back
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => {});
     let refreshing = false;
+    const reloadNow = () => { if (refreshing) return; refreshing = true; location.reload(); };
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing) return;
-      refreshing = true;
-      toast('App updated — changes apply next time you open it', 4000);
+      // Cases auto-save as you type, so reloading is safe; avoid yanking the page while a field is being edited
+      const el = document.activeElement;
+      const typing = el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+      if (!typing || document.visibilityState === 'hidden') return reloadNow();
+      toast('App updated — it will refresh when you leave this field', 4000);
+      el.addEventListener('blur', () => setTimeout(reloadNow, 300), { once: true });
     });
   }
 
