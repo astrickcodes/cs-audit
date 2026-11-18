@@ -54,6 +54,7 @@ test('merge: a new Sheet record is inserted without a needless re-push', () => {
 test('merge: newer Sheet wins but local non-empty values survive missing/empty Sheet fields', () => {
   const local = { study_id: 'CS-001', name: 'Old', phone: '1234567', bw: 0, ac: ['pe'], updatedAt: OLD, syncedAt: OLD };
   const remote = { study_id: 'CS-001', name: 'New', phone: '', ac: [], updatedAt: NEW };
+  assert.equal(Sync.needsSync(local), false, 'equal updatedAt and syncedAt means the phone copy is clean');
   const result = Sync.mergeRecord(local, remote);
   assert.equal(result.name, 'New');
   assert.equal(result.phone, '1234567');
@@ -153,6 +154,20 @@ test('sync: pull first; backfill existing local records once; keep absent local 
   const second = await app.Sync.sync(await app.DB.all());
   assert.deepEqual(plain(second), { pulled: 0, sent: 0, skipped: 0 });
   assert.equal(app.requests.length, 3, 'second sync only pulls');
+});
+
+test('sync: a newer Sheet copy replaces a clean phone copy without a needless push', async () => {
+  const sheet = fakeSheet(), post = loadAppsScript(sheet);
+  const local = { study_id: 'CS-001', name: 'Synced phone', updatedAt: OLD, syncedAt: OLD };
+  const remote = { study_id: 'CS-001', name: 'Newer Sheet', updatedAt: NEW };
+  save(post, remote);
+  assert.equal(Sync.needsSync(local), false, 'syncedAt equal to updatedAt is not dirty');
+  const app = browser([local], (body) => post(body), { syncJsonBackfillV1: config.syncUrl });
+  const result = await app.Sync.sync([local]);
+  assert.deepEqual(plain(result), { pulled: 1, sent: 0, skipped: 0 });
+  assert.deepEqual(await app.DB.get(local.study_id), { ...remote, syncedAt: NEW });
+  assert.equal(Sync.needsSync(await app.DB.get(local.study_id)), false);
+  assert.equal(app.requests.length, 1, 'a clean pulled record only needs the pull request');
 });
 
 test('sync: old deployment falls back to push-only, pushes unsynced cases, keeps the backfill pending', async () => {
