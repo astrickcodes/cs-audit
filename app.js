@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.1.1';
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
   const view = $('#view');
@@ -149,6 +149,7 @@
     $('#lock').hidden = true;
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     route();
+    setTimeout(autoSync, 800);
   }
 
   // ---------- saving ----------
@@ -190,7 +191,10 @@
   async function route() {
     if (!unlocked) return;
     const [, page, id] = (location.hash || '#/home').split('/');
-    if (current && !(page === 'case' && decodeURIComponent(id || '') === current.study_id)) await leaveCase();
+    if (current && !(page === 'case' && decodeURIComponent(id || '') === current.study_id)) {
+      await leaveCase();
+      if (page !== 'case' && page !== 'new') { lastAutoSync = 0; setTimeout(autoSync, 500); }
+    }
     window.scrollTo(0, 0);
     switch (page) {
       case 'list': setTab('list'); return renderList();
@@ -312,18 +316,36 @@
   }
 
   async function doSync(opts) {
+    const quiet = !!(opts && opts.quiet);
+    let changed = true;
     try {
-      toast('Syncing…', 10000);
+      if (!quiet) toast('Syncing…', 10000);
       await flushSave();
       const { pulled, sent, skipped } = await Sync.sync(await DB.all(), opts);
-      toast(`Pulled ${pulled}, sent ${sent} ✓${skipped ? ` · ${skipped} newer Sheet case(s) protected` : ''}`, 4000);
+      changed = !!(pulled || sent || skipped);
+      if (!quiet || changed) toast(`${quiet ? 'Auto-sync: ' : ''}Pulled ${pulled}, sent ${sent} ✓${skipped ? ` · ${skipped} newer Sheet case(s) protected` : ''}`, 4000);
     } catch (e) {
-      toast('Sync failed: ' + e.message, 6000);
+      // Auto-sync stays silent on failure (e.g. weak network); the unsynced count still shows.
+      if (!quiet) toast('Sync failed: ' + e.message, 6000);
     }
     updateNetStatus();
+    if (!changed) return;
     const page = (location.hash || '#/home').split('/')[1];
     if (page === 'home' || !page) renderHome();
     if (page === 'list') renderList();
+  }
+
+  // Auto-sync: when the app opens or comes back, when the network returns, and after leaving a case.
+  // Never while a case form is open, and at most once a minute.
+  let lastAutoSync = 0;
+  function autoSync() {
+    if (!unlocked || !navigator.onLine) return;
+    const { url, token } = Sync.settings();
+    if (!url || !token) return;
+    if ((location.hash || '').startsWith('#/case/') || (location.hash || '').startsWith('#/new')) return;
+    if (Date.now() - lastAutoSync < 60000) return;
+    lastAutoSync = Date.now();
+    doSync({ quiet: true });
   }
 
   // ---------- list ----------
@@ -731,11 +753,13 @@
       flushSave();
     } else if (unlocked && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER_MS) {
       showLock();
+    } else {
+      setTimeout(autoSync, 800);
     }
   });
   window.addEventListener('pagehide', () => flushSave());
   window.addEventListener('hashchange', route);
-  window.addEventListener('online', updateNetStatus);
+  window.addEventListener('online', () => { updateNetStatus(); setTimeout(autoSync, 1500); });
   window.addEventListener('offline', updateNetStatus);
   $('#pinBtn').addEventListener('click', onPinSubmit);
   $('#pinInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') onPinSubmit(); });
