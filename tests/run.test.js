@@ -1,9 +1,6 @@
 // Run with:  node --test tests/
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 
 const Derive = require('../derive.js');
 const Schema = require('../schema.js');
@@ -133,36 +130,7 @@ test('warnings flag audit-relevant inconsistencies', () => {
 });
 
 // ---------- Apps Script upsert with a fake SpreadsheetApp ----------
-function fakeSheet() {
-  const cells = []; // 2-D array, 1-based access via helpers
-  const sheet = {
-    cells,
-    getLastRow: () => cells.length,
-    getLastColumn: () => cells.reduce((m, r) => Math.max(m, r.length), 0),
-    getMaxRows: () => 1000,
-    setFrozenRows() {},
-    getRange(row, col, nr = 1, nc = 1) {
-      return {
-        getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => ((cells[row - 1 + i] || [])[col - 1 + j] ?? ''))),
-        setValues: (vals) => vals.forEach((r, i) => r.forEach((v, j) => { (cells[row - 1 + i] = cells[row - 1 + i] || [])[col - 1 + j] = v; })),
-        setNumberFormat() { return this; },
-        setFontWeight() { return this; },
-      };
-    },
-  };
-  return sheet;
-}
-
-function loadAppsScript(sheet) {
-  const ctx = {
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: () => sheet, insertSheet: () => sheet }) },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ setMimeType: () => ({ body: JSON.parse(s) }) }) },
-  };
-  vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx);
-  return (body) => ctx.doPost({ postData: { contents: JSON.stringify(body) } }).body;
-}
+const { fakeSheet, loadAppsScript } = require('./helpers.js');
 
 test('Apps Script: token check, insert, then update without duplicating', () => {
   const sheet = fakeSheet();
@@ -184,10 +152,11 @@ test('Apps Script: token check, insert, then update without duplicating', () => 
   assert.equal(sheet.cells[1][headers.indexOf('bw')], '3100');
   assert.equal(sheet.cells[2][headers.indexOf('name')], 'Second');
 
-  // A new column added in a later app version is appended to the header
+  // New analysis columns are appended before the always-last raw JSON column
   post({ token, columns: columns.concat('new_col'), rows: [Object.assign({}, edited, { new_col: 'x' })] });
-  assert.equal(sheet.cells[0].at(-1), 'new_col');
-  assert.equal(sheet.cells[1].at(-1), 'x');
+  assert.equal(sheet.cells[0].at(-1), '_json');
+  assert.equal(sheet.cells[0].at(-2), 'new_col');
+  assert.equal(sheet.cells[1].at(-2), 'x');
   assert.deepEqual(post({ token, ping: true }), { ok: true, rows: 2 });
 });
 

@@ -6,7 +6,7 @@ What the app does:
 - Works **offline** in the labour room. Cases are saved on the phone as you type.
 - Calculates the **Robson group**, decision-to-delivery interval, hospital stay, elderly primigravida, BMI, anaemia grade, birth-weight category and perinatal death for you.
 - Lets you save a case as a **Draft** now and finish it later. Discharge and neonatal outcome data usually come in a few days after surgery.
-- **Syncs** to your own private Google Sheet when you have internet, and **exports to CSV** for Excel or SPSS.
+- **Syncs both ways** with your own private Google Sheet when you have internet, and **exports to CSV** for Excel or SPSS.
 
 You only need to do the setup once. It takes about 30 minutes, and Steps 1 and 2 are easiest on a laptop.
 
@@ -42,6 +42,34 @@ The app is just a folder of files. It needs an `https://` web address so the iPh
 
 > If you change `Code.gs` later, use **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. This keeps the same URL.
 
+## Updating the Google Sheet script (two-way sync)
+
+1. In the existing Sheet, open **Extensions → Apps Script** and paste the new `apps-script/Code.gs`. **Keep her existing `const TOKEN = ...` line** (the same token saved on the iPhone).
+2. Save, then **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy**. This updates the **same URL**; do not create a new deployment.
+3. Reopen the iPhone app online to pick up version 1.1.0, then tap **Sync**. It pulls Sheet/bot changes first and sends phone changes afterwards. The first updated sync also re-sends existing phone records to backfill `_json`.
+
+The last Sheet column, `_json`, holds the complete raw record; do not edit it by hand. Bot updates keep it and the analysis columns consistent. Editing ordinary analysis cells alone does **not** update what the phone pulls. Legacy Sheet rows without `_json` become pullable after the phone holding those cases syncs once.
+
+### Bot CLI (Node 18+, no dependencies)
+
+On the bot host, create `~/.config/cs-audit/sync.json` yourself, outside this repository, with `{"url":"YOUR_EXISTING_WEB_APP_URL","token":"YOUR_EXISTING_TOKEN"}`. Restrict it to your account (`chmod 600 ~/.config/cs-audit/sync.json`). Do not commit credentials or patient input files.
+
+```sh
+node tools/bot-case.js schema
+node tools/bot-case.js list
+node tools/bot-case.js get CS-B001
+node tools/bot-case.js next-id
+node tools/bot-case.js upsert /private/path/case.json --dry-run
+node tools/bot-case.js upsert /private/path/case.json
+node tools/bot-case.js upsert /private/path/follow-up.json --overwrite
+```
+
+An input is one JSON object using schema field IDs and option **codes**, not labels. Omit `study_id` for a new case; supply it to complete an existing one. Date/times use `YYYY-MM-DD` / `YYYY-MM-DDTHH:mm` in IST. Unknown keys, invalid options and malformed numbers are reported together. By default only empty fields are filled; `--overwrite` replaces supplied fields, including explicit blanks, without touching unspecified fields. Computed values and completion status are recalculated; incomplete/invalid cases stay drafts. `--dry-run` pulls for merging and prints the proposed record, missing required fields and validation errors, but never posts it. `schema` needs no config or network.
+
+New bot cases use `CS-B001`, `CS-B002`… independently of phone `CS-001` IDs; pulled numeric IDs count towards the phone's next ID. Run bot creation serially: `next-id` is advisory, not a reservation. **Renumber cases from CS-001** includes bot IDs, orders all phone cases by creation time and converts them to numeric IDs. Renumbering does not remove old Sheet rows: delete the old-ID rows **before the next sync**, or the pull will restore those old IDs as additional cases. Local deletion is also not propagated; delete the Sheet row as well or a later pull restores it. No sync operation deletes local cases.
+
+If another writer updates a case between pull and push, the server skips the stale write. The phone merges the returned newer record; any combined fields still pending go out on the next sync. The CLI reports the conflict so it can be re-run. Device clocks should be correct, since conflicts use `updatedAt`. For a legacy row whose `_json` has not yet been backfilled, only its ID/timestamp can be returned on a stale-write conflict.
+
 ## Step 3: Install on the iPhone
 
 1. Open the address from Step 1 in **Safari**. It must be Safari, not Chrome.
@@ -73,7 +101,7 @@ Tips:
 - Tap a selected choice again to clear it.
 - The **Now** button fills in the current date and time.
 - Editing a synced case marks it as unsynced again. The next sync **updates the same row** in the Sheet rather than adding a new one.
-- If you delete a case in the app, also delete its row in the Google Sheet.
+- If you delete a case in the app, also delete its row in the Google Sheet before syncing, or the pull restores it.
 
 ## Analysis
 

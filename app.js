@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.0.2';
+  const APP_VERSION = '1.1.0';
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
   const view = $('#view');
@@ -64,6 +64,7 @@
     const all = await DB.all();
     let max = Number(localStorage.getItem('lastSeq')) || 0;
     for (const r of all) {
+      // Pulled numeric IDs count too; bot IDs (CS-Bnnn) have a separate sequence.
       const m = /^CS-(\d+)$/.exec(r.study_id);
       if (m) max = Math.max(max, Number(m[1]));
     }
@@ -313,8 +314,9 @@
   async function doSync(opts) {
     try {
       toast('Syncing…', 10000);
-      const n = await Sync.sync(await DB.all(), opts);
-      toast(n ? `Synced ${n} case${n > 1 ? 's' : ''} to Google Sheet ✓` : 'Everything is already synced ✓');
+      await flushSave();
+      const { pulled, sent, skipped } = await Sync.sync(await DB.all(), opts);
+      toast(`Pulled ${pulled}, sent ${sent} ✓${skipped ? ` · ${skipped} newer Sheet case(s) protected` : ''}`, 4000);
     } catch (e) {
       toast('Sync failed: ' + e.message, 6000);
     }
@@ -322,6 +324,7 @@
     const page = (location.hash || '#/home').split('/')[1];
     if (page === 'home' || !page) renderHome();
     if (page === 'list') renderList();
+    if (page === 'settings') renderSettings();
   }
 
   // ---------- list ----------
@@ -630,7 +633,7 @@
         <label>Target sample size</label>
         <input id="setTarget" type="number" inputmode="numeric" value="${target()}">
         <div class="row"><button class="btn" id="renumber">Renumber cases from CS-001</button></div>
-        <p class="muted small">Gives the cases on this phone IDs CS-001, CS-002… in the order they were created, and the next new case continues from there.</p>
+        <p class="muted small">Gives all cases on this phone (including bot CS-B IDs) IDs CS-001, CS-002… in creation order. Old Sheet rows remain: delete them before syncing again, or they will be pulled back.</p>
       </div>
       <div class="card">
         <h3>Security</h3>
@@ -683,7 +686,7 @@
       }
       const synced = moves.filter(([r]) => r.syncedAt).length;
       const list = moves.map(([r, id]) => `${r.study_id} → ${id}`).join('\n');
-      if (!confirm(`Change these study IDs?\n\n${list}${synced ? `\n\n⚠️ ${synced} of these were already sent to the Google Sheet. After syncing, delete the rows with the old IDs from the Sheet.` : ''}`)) return;
+      if (!confirm(`Change these study IDs?\n\n${list}${synced ? `\n\n⚠️ ${synced} of these were already sent to the Google Sheet. Delete the rows with the old IDs from the Sheet BEFORE syncing again, otherwise two-way sync pulls them back.` : ''}`)) return;
       const t = nowIso();
       const recs = moves.map(([r, id]) => {
         const n = Object.assign({}, r, { study_id: id, updatedAt: t });
