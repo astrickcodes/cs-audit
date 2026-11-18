@@ -14,6 +14,8 @@ function doPost(e) {
     if (!body || body.token !== TOKEN) return reply({ ok: false, error: 'Wrong token' });
     const sheet = getSheet();
     if (body.ping) return reply({ ok: true, rows: Math.max(0, sheet.getLastRow() - 1) });
+    // Read-only full copy of the Sheet, used for laptop CSV backups.
+    if (body.export) return reply({ ok: true, values: sheet.getLastRow() ? sheet.getDataRange().getDisplayValues() : [] });
 
     const lock = LockService.getScriptLock();
     lock.waitLock(30000);
