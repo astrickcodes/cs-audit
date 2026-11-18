@@ -21,7 +21,7 @@
     return new Date(Math.max(Date.now(), ...values.map((v) => timestamp(v) + 1))).toISOString();
   }
 
-  // Newer record wins, but a blank never erases a non-empty field from the other copy.
+  // Unsynced local values always win; otherwise the newer record wins. Blanks never erase values.
   // syncedAt is a local acknowledgement, never a field to copy between devices.
   function mergeRecord(local, sheet) {
     if (!local) {
@@ -29,7 +29,10 @@
       delete record._dirty;
       return record;
     }
-    const sheetWins = timestamp(sheet.updatedAt) > timestamp(local.updatedAt);
+    // Unsynced phone edits are never overridden: the Sheet may only fill their empty fields.
+    const localDirty = needsSync(local);
+    const sheetNewer = timestamp(sheet.updatedAt) >= timestamp(local.updatedAt);
+    const sheetWins = !localDirty && timestamp(sheet.updatedAt) > timestamp(local.updatedAt);
     const primary = sheetWins ? sheet : local;
     const secondary = sheetWins ? local : sheet;
     const merged = Object.assign({}, primary);
@@ -42,7 +45,8 @@
         filled = true;
       }
     }
-    if (filled) {
+    if (filled || (localDirty && sheetNewer)) {
+      // Bump past the Sheet copy so the server's stale-write guard accepts the phone's edits.
       merged.updatedAt = nextTimestamp(local.updatedAt, sheet.updatedAt);
       delete merged.syncedAt; // The combined record must be pushed back.
     } else if (sheetWins) merged.syncedAt = sheet.updatedAt || '';
@@ -82,12 +86,23 @@
     if (!navigator.onLine) throw new Error('You are offline — sync when connected');
     const backfill = localStorage.getItem(BACKFILL_KEY) !== url;
     const originalIds = new Set((await DB.all()).map((r) => r.study_id));
-    const incoming = await post(url, { token, pull: true });
-    if (!Array.isArray(incoming.rows)) throw new Error('Update and redeploy Code.gs to enable two-way sync, then try again');
-    let pulled = 0, sent = 0, skipped = 0;
-    for (const record of incoming.rows) if (await mergeIntoDB(record)) pulled++;
+    // Pull is optional until the Sheet script is upgraded; uploads must still work.
+    let twoWay = false, pulled = 0, sent = 0, skipped = 0;
+    const controller = new AbortController();
+    const pullTimeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const incoming = await post(url, { token, pull: true }, (target, options) =>
+        root.fetch(target, Object.assign({}, options, { signal: controller.signal })));
+      clearTimeout(pullTimeout);
+      if (Array.isArray(incoming.rows)) {
+        for (const record of incoming.rows) if (await mergeIntoDB(record)) pulled++;
+        twoWay = true;
+      }
+    } catch (e) {
+      // Silently retain legacy push-only sync on any pull failure.
+    } finally { clearTimeout(pullTimeout); }
     // Re-read: never push the stale snapshot supplied before the pull (or an intervening edit).
-    const pending = (await DB.all()).filter((r) => all || needsSync(r) || (backfill && originalIds.has(r.study_id)));
+    const pending = (await DB.all()).filter((r) => all || needsSync(r) || (twoWay && backfill && originalIds.has(r.study_id)));
     for (let i = 0; i < pending.length; i += 50) {
       const batch = pending.slice(i, i + 50);
       const result = await post(url, { token, columns: columns(), textColumns: TEXT_COLUMNS, rows: batch.map(flatten) });
@@ -105,7 +120,7 @@
       sent += result.written === undefined ? batch.length - conflicts.length : result.written;
       skipped += conflicts.length;
     }
-    localStorage.setItem(BACKFILL_KEY, url);
+    if (twoWay) localStorage.setItem(BACKFILL_KEY, url);
     localStorage.setItem('lastSync', new Date().toISOString());
     return { pulled, sent, skipped };
   }

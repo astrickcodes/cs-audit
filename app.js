@@ -324,7 +324,6 @@
     const page = (location.hash || '#/home').split('/')[1];
     if (page === 'home' || !page) renderHome();
     if (page === 'list') renderList();
-    if (page === 'settings') renderSettings();
   }
 
   // ---------- list ----------
@@ -633,7 +632,7 @@
         <label>Target sample size</label>
         <input id="setTarget" type="number" inputmode="numeric" value="${target()}">
         <div class="row"><button class="btn" id="renumber">Renumber cases from CS-001</button></div>
-        <p class="muted small">Gives all cases on this phone (including bot CS-B IDs) IDs CS-001, CS-002… in creation order. Old Sheet rows remain: delete them before syncing again, or they will be pulled back.</p>
+        <p class="muted small">Gives the cases on this phone IDs CS-001, CS-002… in the order they were created, and the next new case continues from there.</p>
       </div>
       <div class="card">
         <h3>Security</h3>
@@ -686,7 +685,7 @@
       }
       const synced = moves.filter(([r]) => r.syncedAt).length;
       const list = moves.map(([r, id]) => `${r.study_id} → ${id}`).join('\n');
-      if (!confirm(`Change these study IDs?\n\n${list}${synced ? `\n\n⚠️ ${synced} of these were already sent to the Google Sheet. Delete the rows with the old IDs from the Sheet BEFORE syncing again, otherwise two-way sync pulls them back.` : ''}`)) return;
+      if (!confirm(`Change these study IDs?\n\n${list}${synced ? `\n\n⚠️ ${synced} of these were already sent to the Google Sheet. After syncing, delete the rows with the old IDs from the Sheet.` : ''}`)) return;
       const t = nowIso();
       const recs = moves.map(([r, id]) => {
         const n = Object.assign({}, r, { study_id: id, updatedAt: t });

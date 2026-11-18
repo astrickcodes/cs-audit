@@ -18,7 +18,7 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 function save(post, ...records) {
   return post({ token, columns: Sync.columns(), textColumns: Sync.TEXT_COLUMNS, rows: records.map(Sync.flatten) });
 }
-function browser(records, handler, storage = {}) {
+function browser(records, handler, storage = {}, globals = {}) {
   const data = new Map(records.map((r) => [r.study_id, clone(r)]));
   const values = new Map(Object.entries({ ...config, ...storage }));
   const requests = [];
@@ -28,14 +28,15 @@ function browser(records, handler, storage = {}) {
     put: async (record) => data.set(record.study_id, clone(record)),
   };
   const context = {
-    Schema, Derive, DB, navigator: { onLine: true },
+    Schema, Derive, DB, AbortController, setTimeout, clearTimeout, navigator: { onLine: true },
     localStorage: { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, String(value)) },
     fetch: async (url, options) => {
       const body = JSON.parse(options.body);
       requests.push(body);
-      return { json: async () => handler(body, DB) };
+      return { json: async () => handler(body, DB, options) };
     },
   };
+  Object.assign(context, globals);
   context.window = context;
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'sync.js'), 'utf8'), context);
   return { Sync: context.Sync, DB, values, requests };
@@ -60,7 +61,7 @@ test('merge: newer Sheet wins but local non-empty values survive missing/empty S
   assert.deepEqual(result.ac, ['pe']);
   assert.ok(result.updatedAt > NEW);
   assert.ok(Sync.needsSync(result), 'combined fields must reach the Sheet');
-  const replaced = Sync.mergeRecord({ study_id: 'CS-001', name: 'Old', updatedAt: OLD }, remote);
+  const replaced = Sync.mergeRecord({ study_id: 'CS-001', name: 'Old', updatedAt: OLD, syncedAt: OLD }, remote);
   assert.equal(replaced.name, 'New');
   assert.equal(replaced.syncedAt, NEW);
   assert.equal(Sync.needsSync(replaced), false);
@@ -154,11 +155,72 @@ test('sync: pull first; backfill existing local records once; keep absent local 
   assert.equal(app.requests.length, 3, 'second sync only pulls');
 });
 
-test('sync: old deployment fails clearly without consuming the one-time backfill', async () => {
-  const app = browser([{ study_id: 'CS-001', updatedAt: OLD }], () => ({ ok: true, written: 0 }));
-  await assert.rejects(app.Sync.sync([]), /redeploy Code.gs/);
+test('sync: old deployment falls back to push-only, pushes unsynced cases, keeps the backfill pending', async () => {
+  const synced = { study_id: 'CS-001', name: 'Done', updatedAt: OLD, syncedAt: OLD };
+  const unsynced = { study_id: 'CS-002', name: 'Offline case', updatedAt: NEW };
+  const app = browser([synced, unsynced], (body) => ({ ok: true, written: body.rows ? body.rows.length : 0 }));
+  const result = await app.Sync.sync([]);
+  assert.equal(result.pulled, 0);
+  assert.equal(result.sent, 1);
+  assert.deepEqual(app.requests[1].rows.map((r) => r.study_id), ['CS-002']);
   assert.equal(app.values.has('syncJsonBackfillV1'), false);
-  assert.equal(app.requests.length, 1);
+  assert.equal(Sync.needsSync(await app.DB.get('CS-002')), false);
+});
+
+test('sync: any pull error never blocks the push or consumes backfill', async () => {
+  for (const reply of [
+    () => ({ ok: false, error: 'Unknown action' }),
+    () => { throw new Error('Network failure'); },
+    () => { throw new SyntaxError('Malformed JSON'); },
+    () => ({ ok: true, rows: [null] }),
+  ]) {
+    const unsynced = { study_id: 'CS-002', name: 'Offline case', updatedAt: NEW };
+    const app = browser([unsynced], (body) => body.pull ? reply() : { ok: true, written: 1 });
+    const result = await app.Sync.sync([]);
+    assert.equal(result.sent, 1);
+    assert.equal(app.values.has('syncJsonBackfillV1'), false);
+    assert.equal((await app.DB.get('CS-002')).name, 'Offline case');
+  }
+});
+
+test('sync: a hanging pull times out silently and still uploads phone cases', async () => {
+  const unsynced = { study_id: 'CS-002', name: 'Offline case', updatedAt: NEW };
+  const app = browser([unsynced], (body, DB, options) => {
+    if (!body.pull) return { ok: true, written: 1 };
+    return new Promise((resolve, reject) => {
+      if (options.signal.aborted) reject(new Error('Aborted'));
+      else options.signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+    });
+  }, {}, { setTimeout: (callback) => setTimeout(callback, 0) });
+  const result = await app.Sync.sync([]);
+  assert.equal(result.sent, 1);
+  assert.equal(app.values.has('syncJsonBackfillV1'), false);
+});
+
+test('sync: unsynced phone values survive newer Sheet data, without deletion or renumbering', async () => {
+  const sheet = fakeSheet(), post = loadAppsScript(sheet);
+  save(post, { study_id: 'CS-007', name: 'Bot edit', phone: '1234567', updatedAt: NEW });
+  const local = { study_id: 'CS-007', name: 'Unsynced phone', phone: '', updatedAt: OLD };
+  const absent = { study_id: 'CS-B001', name: 'Phone only', updatedAt: OLD };
+  const app = browser([local, absent], (body) => post(body));
+  const result = await app.Sync.sync([]);
+  assert.equal(result.sent, 2);
+  assert.equal(result.skipped, 0);
+  assert.deepEqual((await app.DB.all()).map((r) => r.study_id), ['CS-007', 'CS-B001']);
+  assert.equal((await app.DB.get('CS-007')).name, 'Unsynced phone');
+  assert.equal((await app.DB.get('CS-007')).phone, '1234567');
+  assert.equal(post({ token, pull: true }).rows[0].name, 'Unsynced phone');
+});
+
+test('merge: unsynced phone edits beat a newer Sheet copy; Sheet only fills blanks; result pushes past the guard', () => {
+  const local = { study_id: 'CS-001', name: 'Phone edit', hb: 9, updatedAt: NEW, syncedAt: OLD };
+  const remote = { study_id: 'CS-001', name: 'Bot value', hb: 11, bw: 2800, updatedAt: LATEST };
+  const result = Sync.mergeRecord(local, remote);
+  assert.equal(result.name, 'Phone edit');
+  assert.equal(result.hb, 9);
+  assert.equal(result.bw, 2800);
+  assert.ok(Date.parse(result.updatedAt) > Date.parse(LATEST));
+  assert.equal(Sync.needsSync(result), true);
 });
 
 test('sync: edits made in flight are retained and stay pending', async () => {
@@ -190,7 +252,7 @@ test('sync: a newer bot edit between pull and push survives, retained phone fiel
   assert.equal(result.sent, 0);
   assert.equal(result.skipped, 1);
   const merged = await app.DB.get(local.study_id);
-  assert.equal(merged.name, 'Newer bot');
+  assert.equal(merged.name, 'Phone', 'unsynced phone values survive a conflict');
   assert.equal(merged.phone, '1234567');
   assert.ok(Sync.needsSync(merged));
   assert.equal(post({ token, pull: true }).rows[0].name, 'Newer bot');

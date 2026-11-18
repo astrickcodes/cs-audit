@@ -48,6 +48,8 @@ The app is just a folder of files. It needs an `https://` web address so the iPh
 2. Save, then **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy**. This updates the **same URL**; do not create a new deployment.
 3. Reopen the iPhone app online to pick up version 1.1.0, then tap **Sync**. It pulls Sheet/bot changes first and sends phone changes afterwards. The first updated sync also re-sends existing phone records to backfill `_json`.
 
+If the Sheet script has not been updated, or pulling fails/times out, Sync silently falls back to uploading pending phone cases as before. The one-time full backfill waits until pull is supported. Unsynced phone edits always keep their non-empty values, even against a newer Sheet copy; the Sheet may only fill empty fields. Once phone edits are synced, newer Sheet values can replace them. Sync never deletes or renumbers cases.
+
 The last Sheet column, `_json`, holds the complete raw record; do not edit it by hand. Bot updates keep it and the analysis columns consistent. Editing ordinary analysis cells alone does **not** update what the phone pulls. Legacy Sheet rows without `_json` become pullable after the phone holding those cases syncs once.
 
 ### Bot CLI (Node 18+, no dependencies)
